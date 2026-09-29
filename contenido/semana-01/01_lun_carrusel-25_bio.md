@@ -34,7 +34,7 @@ Visual: número "1" grande en esquina, ejemplo en caja con borde fino. · Dorado
 Subtítulo: "Terraza frente a la muralla." "Reserva por WhatsApp." Y el enlace va a un solo lugar: donde se compra.
 Visual: números "2" y "3", ejemplos en cajas. · Dorado: **ahora**
 
-**Slide 7 — Antes / Después**
+**Slide 7 — Tres líneas. Otra bio.**
 Antes: "Comida con amor | Desde 2019 | Cartagena"
 Después: "Cocina caribeña para celebrar en el Centro. Terraza frente a la muralla. Reserva tu mesa por WhatsApp."
 Visual: dos mockups de perfil lado a lado, el "antes" en gris. Nota pequeña: "Ejemplo ilustrativo." · Dorado: **Después**
