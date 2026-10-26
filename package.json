@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lightroom-presets": "node --no-warnings scripts/build-lightroom-presets.mjs",
     "test": "node --no-warnings --test tests/*.test.mjs"
   },
   "dependencies": {

@@ -18,6 +18,8 @@ Abre http://localhost:3000 y arrastra tus fotos (JPG, PNG o WEBP).
 - **Color:** temperatura, matiz, intensidad y saturación.
 - **Efectos:** claridad, nitidez, desvanecer (look mate), viñeta y grano.
 - **Mezcla de color (HSL):** tono, saturación y luminancia de 8 colores.
+- **Looks de la marca:** FM Mediterráneo, FM Golden Pool y FM Film Verano. También están como presets de Lightroom en [`lightroom-presets/`](lightroom-presets/README.md).
+- **Gradación de color:** tono y saturación para sombras e iluminaciones.
 - **Presets:** Orgánico Cálido, Fitness Punch, Verde Fresco, Mate Lifestyle, Moody Gym, B&N Atlético y Golden Hour.
   También puedes guardar los tuyos.
 - **Recorte para redes:** 4:5 feed (1080×1350), 1:1 (1080×1080), 9:16 story/reel (1080×1920), 16:9 (1920×1080) u original.
