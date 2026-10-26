@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background: #030303;
+  color: #fff;
+}
+
+/* Sliders estilo Lightroom */
+input[type='range'].lr-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range'].lr-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--track, rgba(255, 255, 255, 0.15));
+  border-radius: 2px;
+}
+input[type='range'].lr-slider::-moz-range-track {
+  height: 2px;
+  background: var(--track, rgba(255, 255, 255, 0.15));
+  border-radius: 2px;
+}
+input[type='range'].lr-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -5px;
+  border-radius: 9999px;
+  background: #e5e5e5;
+  border: none;
+  transition: transform 0.1s;
+}
+input[type='range'].lr-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #e5e5e5;
+  border: none;
+}
+input[type='range'].lr-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+  background: #22d3ee;
+}
+input[type='range'].lr-slider:focus-visible {
+  outline: 1px solid rgba(34, 211, 238, 0.5);
+  outline-offset: 2px;
+}
+
+.checkerboard {
+  background-color: #111;
+  background-image: linear-gradient(45deg, #161616 25%, transparent 25%),
+    linear-gradient(-45deg, #161616 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #161616 75%),
+    linear-gradient(-45deg, transparent 75%, #161616 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
