@@ -7,8 +7,8 @@ Genera la voz con [Voice Studio](https://github.com/debpalash/voicestudio): cód
 ## Preparación (una sola vez)
 
 1. **Instala Voice Studio**: descárgalo de <https://github.com/debpalash/VoiceStudio/releases/latest> y ábrelo. La primera vez te pedirá descargar el modelo de voz.
-2. **Clona tu voz**: graba de 15 a 30 segundos hablando natural, como en tus videos, en un lugar silencioso y sin música (sirve una nota de voz del celular). En la app, entra a **Voice cloning**, sube la grabación y guárdala como perfil con el nombre **Mi voz**.
-   - Si la grabación tiene ruido, primero límpiala con:
+2. **Clona tu voz**: graba de 15 a 30 segundos hablando natural, como en tus videos, en un lugar silencioso y sin música (sirve una nota de voz del celular). En la app, entra a **Voice cloning**, sube la grabación preparada con `preparar_referencia.sh` (abajo) y guárdala como perfil con el nombre **Mi voz**.
+   - Prepárala así (limpia el ruido y corta unos 10 segundos en una pausa natural; las grabaciones más largas agotan la memoria en Macs de 8 GB):
      ```bash
      bash .claude/skills/mi-voz/scripts/preparar_referencia.sh mi_grabacion.m4a
      ```

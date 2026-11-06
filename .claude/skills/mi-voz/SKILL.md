@@ -15,7 +15,7 @@ Todas las rutas son relativas a la raíz del repositorio. Carpeta del skill: `.c
    - Si no responde, pide al usuario que abra la app Voice Studio y espere a que cargue. No instales otra copia.
    - Si el usuario usa otra dirección, va en la variable `VOICESTUDIO_URL`.
 2. **Perfil con su voz**: ejecuta `python .claude/skills/mi-voz/scripts/generar_voz.py --listar-voces`.
-   - Si no hay perfiles, explícale: en Voice Studio, sección **Voice cloning**, debe subir una grabación de 15 a 30 segundos (hablando natural, sin ruido ni música) y guardarla como perfil con el nombre **Mi voz**. Si la grabación tiene ruido, límpiala antes con `bash .claude/skills/mi-voz/scripts/preparar_referencia.sh <grabacion> .claude/skills/mi-voz/voz/referencia.wav` y súbela.
+   - Si no hay perfiles: pide una grabación de 15 a 30 segundos (hablando natural, sin ruido ni música). Prepárala con `bash .claude/skills/mi-voz/scripts/preparar_referencia.sh <grabacion> .claude/skills/mi-voz/voz/referencia.wav` (limpia y corta unos 10 s en una pausa natural) y súbela en Voice Studio, sección **Voice cloning**, como perfil **Mi voz**. Sube siempre la versión preparada: las referencias largas agotan la memoria en Macs de 8 GB.
    - Clona solo la voz del usuario o la de alguien que lo haya autorizado.
    - Si su perfil tiene otro nombre, pásalo con `--voz "<nombre>"`.
 3. **ffmpeg**: comprueba con `ffmpeg -version`.
@@ -61,6 +61,7 @@ Para cambiar el volumen del audio original en modo `mezclar`, antepón `VOLUMEN_
 Indica al usuario dónde quedó el video final y cuánto dura (según lo que imprime el script, no lo supongas), y pregúntale si quiere cambiar el tono, la velocidad o el guion.
 
 ## Problemas comunes
-- **No suena como el usuario**: la grabación del perfil tiene ruido, música o es muy corta. Pide una más limpia, de 15 a 30 s, y que rehaga el perfil.
+- **"Not enough free memory to prepare this voice reference"** (pasa en Macs de 8 GB): la referencia del perfil es muy larga. Prepara una de unos 10 s con `preparar_referencia.sh` (ya corta en una pausa cerca de los 10 s por defecto; `DURACION=7` para más corta), crea un perfil nuevo con ella y pide al usuario cerrar apps pesadas (Chrome con muchas pestañas, por ejemplo).
+- **No suena como el usuario**: la grabación del perfil tiene ruido, música o es muy corta. Pide una grabación más limpia, prepárala con `preparar_referencia.sh` y rehaz el perfil.
 - **Pronuncia mal marcas o palabras en inglés**: escríbelas en el guion como se pronuncian (por ejemplo, "Fit max orgánic").
 - **Muy lento**: sin tarjeta gráfica NVIDIA o un Mac con chip M, generar audio tarda varios minutos. Es normal.
