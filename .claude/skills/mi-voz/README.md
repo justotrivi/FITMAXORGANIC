@@ -7,12 +7,11 @@ Genera la voz con [Voice Studio](https://github.com/debpalash/voicestudio): cód
 ## Preparación (una sola vez)
 
 1. **Instala Voice Studio**: descárgalo de <https://github.com/debpalash/VoiceStudio/releases/latest> y ábrelo. La primera vez te pedirá descargar el modelo de voz.
-2. **Clona tu voz**: graba de 15 a 30 segundos hablando natural, como en tus videos, en un lugar silencioso y sin música (sirve una nota de voz del celular). En la app, entra a **Voice cloning**, sube la grabación preparada con `preparar_referencia.sh` (abajo) y guárdala como perfil con el nombre **Mi voz**.
-   - Prepárala así (limpia el ruido y corta unos 10 segundos en una pausa natural; las grabaciones más largas agotan la memoria en Macs de 8 GB):
-     ```bash
-     bash .claude/skills/mi-voz/scripts/preparar_referencia.sh mi_grabacion.m4a
-     ```
-     y sube `.claude/skills/mi-voz/voz/referencia.wav`. Ese archivo **no se sube a GitHub** (está en `.gitignore`), porque es tu voz.
+2. **Clona tu voz**: graba de 15 a 30 segundos hablando natural, como en tus videos, en un lugar silencioso, cerca del micrófono y sin música (sirve una nota de voz del celular). Con Voice Studio abierto:
+   ```bash
+   python3 .claude/skills/mi-voz/scripts/crear_perfil.py mi_grabacion.m4a --es-mi-voz
+   ```
+   Limpia la grabación, corta unos 10 segundos en una pausa natural (más largo agota la memoria en Macs de 8 GB), **la transcribe** para que el texto coincida exacto con tu audio y crea el perfil **Mi voz**. Tu grabación **no se sube a GitHub** (está en `.gitignore`).
 3. **Instala ffmpeg** (para montar el audio en el video):
    - Mac: `brew install ffmpeg`
    - Windows: `winget install ffmpeg`
@@ -27,16 +26,22 @@ Con Voice Studio abierto, abre Claude Code en la carpeta del repo y pide, por ej
 
 > Escríbeme un guion de 30 segundos sobre el batido verde y ponlo con mi voz en `videos/batido.mp4`
 
-El video final queda en `salidas/`.
+> Narra el reel `SOCIAL NO TE VEN/NO_TE_VEN_error_03_sin_audio.mp4` con mi voz, frase por frase con cada escena
+
+El video final queda en `salidas/`. Cada frase se transcribe para comprobar que se entiende; si no, se regenera (hasta 3 intentos).
 
 ### Uso manual (sin Claude)
 
 ```bash
-python .claude/skills/mi-voz/scripts/generar_voz.py --listar-voces
+python3 .claude/skills/mi-voz/scripts/generar_voz.py --listar-voces
 
-python .claude/skills/mi-voz/scripts/generar_voz.py --texto "Hola, soy de Fitmax" --salida salidas/voz.wav
+python3 .claude/skills/mi-voz/scripts/generar_voz.py --texto "Hola, soy de Fit max orgánic." --salida salidas/voz.wav
 
 bash .claude/skills/mi-voz/scripts/montar_video.sh videos/mi_video.mp4 salidas/voz.wav salidas/final.mp4 mezclar
+
+# Reels por escenas: ver escenas, escribir guion (segundo<TAB>frase) y narrar
+python3 .claude/skills/mi-voz/scripts/narrar_por_escenas.py --detectar videos/reel.mp4 --carpeta salidas/reel
+python3 .claude/skills/mi-voz/scripts/narrar_por_escenas.py --guion salidas/reel/guion.txt --video videos/reel.mp4 --salida salidas/reel_CON_MI_VOZ.mp4
 ```
 
 ## Respaldo: Chatterbox

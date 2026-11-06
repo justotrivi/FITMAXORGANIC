@@ -3,30 +3,32 @@
 
 Motores:
   voicestudio (por defecto)  App Voice Studio abierta en tu computadora (API local, puerto 3900).
-                             Usa el perfil de voz que clonaste en la app (--voz "Mi voz").
+                             Usa el perfil de voz creado con crear_perfil.py (--voz "Mi voz").
+                             Verifica cada frase transcribiéndola y la regenera si no se entiende.
   chatterbox                 Respaldo sin app: Chatterbox (MIT) con una grabación de referencia.
 
 Uso:
-  python generar_voz.py --guion guion.txt --voz "Mi voz" --salida voz.wav
+  python generar_voz.py --guion guion.txt --salida voz.wav
+  python generar_voz.py --texto "Hola" --salida voz.wav
   python generar_voz.py --listar-voces
-  python generar_voz.py --motor chatterbox --guion guion.txt --referencia voz/referencia.wav --salida voz.wav
 """
 from __future__ import annotations  # compatible con Python 3.9 (el de macOS)
 
 import argparse
 import json
 import os
+import random
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-VOICESTUDIO_URL = os.environ.get("VOICESTUDIO_URL", "http://localhost:3900").rstrip("/")
-MAX_VOICESTUDIO = 1000  # la API acepta hasta 4096; fragmentos medianos suenan más estables
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import vs  # noqa: E402
+
+MAX_VOICESTUDIO = 300  # frases cortas: el modelo pronuncia mejor y es más fácil reintentar
 MAX_CHATTERBOX = 250
 
 
@@ -61,88 +63,104 @@ def dividir_texto(texto: str, maximo: int) -> list[str]:
     return fragmentos
 
 
-# ── Voice Studio ─────────────────────────────────────────────────────────────
-
-def _vs_pedir(ruta: str, datos: dict | None = None, timeout: float = 30) -> bytes:
-    cuerpo = json.dumps(datos).encode() if datos is not None else None
-    req = urllib.request.Request(
-        VOICESTUDIO_URL + ruta,
-        data=cuerpo,
-        headers={"Content-Type": "application/json"} if cuerpo else {},
-        method="POST" if cuerpo else "GET",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read()
-    except urllib.error.HTTPError as e:
-        detalle = e.read().decode(errors="replace")
-        try:
-            detalle = json.loads(detalle)["error"]["message"]
-        except Exception:
-            pass
-        raise RuntimeError(f"Voice Studio respondió {e.code}: {detalle}") from None
-    except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
-        raise RuntimeError(
-            f"No pude conectar con Voice Studio en {VOICESTUDIO_URL} ({e}).\n"
-            "Abre la app Voice Studio en tu computadora y vuelve a intentar."
-        ) from None
+def duracion(ruta: Path) -> float:
+    salida = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(ruta)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return float(salida)
 
 
-def vs_perfiles() -> list[dict]:
-    voces = json.loads(_vs_pedir("/v1/audio/voices"))
-    voces = voces.get("voices", voces) if isinstance(voces, dict) else voces
-    return [v for v in voces if v.get("type") == "profile"]
+# ── Voice Studio con verificación ────────────────────────────────────────────
 
+def generar_frases(textos: list[str], carpeta: Path, voz: str, idioma: str = "es", velocidad: float = 1.0,
+                   estilo: str | None = None, pasos: int = 32, verificar: bool = True,
+                   umbral: float = 0.85, intentos: int = 3, reusar: bool = False) -> list[dict]:
+    """Genera cada frase en carpeta/NN.wav. Si verificar, la transcribe y reintenta las que no se entienden.
 
-def generar_voicestudio(fragmentos, args, carpeta: Path) -> list[Path]:
-    _vs_pedir("/health", timeout=10)
-    perfiles = vs_perfiles()
-    if not perfiles:
-        raise RuntimeError(
-            "No tienes perfiles de voz en Voice Studio. En la app ve a Voice cloning, "
-            "sube tu grabación y guárdala como perfil (por ejemplo, \"Mi voz\")."
+    Devuelve una lista de dicts: {archivo, texto, transcripcion, similitud, intentos}.
+    Con reusar=True conserva las frases ya generadas antes con el mismo texto (guarda frases.json).
+    """
+    vs.comprobar()
+    perfil = vs.buscar_perfil(voz)
+    if not perfil:
+        nombres = ", ".join(f'"{p["name"]}"' for p in vs.perfiles()) or "ninguno"
+        raise vs.VSError(
+            f'No encontré el perfil de voz "{voz}" en Voice Studio (perfiles: {nombres}). '
+            "Créalo con crear_perfil.py."
         )
-    buscado = args.voz.strip().lower()
-    elegido = next((p for p in perfiles if p["voice_id"] == args.voz), None) or next(
-        (p for p in perfiles if p["name"].strip().lower() == buscado), None
-    )
-    if not elegido:
-        nombres = ", ".join(f'"{p["name"]}"' for p in perfiles)
-        raise RuntimeError(f'No encontré el perfil "{args.voz}". Perfiles disponibles: {nombres}')
+    carpeta.mkdir(parents=True, exist_ok=True)
+    registro_ruta = carpeta / "frases.json"
+    anterior = {}
+    if reusar and registro_ruta.exists():
+        anterior = {r["archivo"]: r for r in json.loads(registro_ruta.read_text(encoding="utf-8"))}
 
-    archivos = []
-    for i, fragmento in enumerate(fragmentos, 1):
-        print(f"[{i}/{len(fragmentos)}] {fragmento}")
-        peticion = {
-            "model": "tts-1",  # alias: el motor que tengas activo en Voice Studio
-            "input": fragmento,
-            "voice": elegido["voice_id"],
-            "response_format": "wav",
-            "language": args.idioma,
-            "speed": args.velocidad,
-        }
-        if args.estilo:
-            peticion["instructions"] = args.estilo
-        audio = _vs_pedir("/v1/audio/speech", peticion, timeout=1800)
-        if not audio.startswith(b"RIFF"):
-            raise RuntimeError("Voice Studio no devolvió un audio válido: " + audio[:200].decode(errors="replace"))
-        destino = carpeta / f"{i:03d}.wav"
-        destino.write_bytes(audio)
-        archivos.append(destino)
-    return archivos
+    resultados = []
+    for i, texto in enumerate(textos, 1):
+        texto = vs.preparar_texto(texto)
+        archivo = carpeta / f"{i:02d}.wav"
+        previo = anterior.get(archivo.name)
+        if previo and previo["texto"] == texto and archivo.exists():
+            print(f"[{i}/{len(textos)}] (ya estaba) {texto}")
+            resultados.append(dict(previo, archivo=archivo.name))
+            continue
+        print(f"[{i}/{len(textos)}] {texto}")
+        archivo.write_bytes(vs.sintetizar(texto, perfil["voice_id"], idioma, velocidad, estilo, pasos,
+                                          random.randint(1, 2**31 - 1)))
+        resultados.append({"archivo": archivo.name, "texto": texto, "transcripcion": None,
+                           "similitud": None, "intentos": 1})
+
+    if verificar:
+        # Primero se generan todas y luego se transcriben: así no se cargan los dos modelos a la vez
+        pendientes = [r for r in resultados if r["similitud"] is None or r["similitud"] < umbral]
+        ronda = 1
+        while pendientes:
+            print(f"Verificando {len(pendientes)} frase(s) (ronda {ronda})...")
+            for r in pendientes:
+                oido = vs.transcribir(Path(r.get("_candidato") or carpeta / r["archivo"]), idioma)
+                sim = vs.similitud(r["texto"], oido)
+                mejor = r.get("similitud")
+                if mejor is None or sim > mejor:
+                    r.update(transcripcion=oido, similitud=round(sim, 2))
+                    if r.get("_candidato"):
+                        Path(r.pop("_candidato")).replace(carpeta / r["archivo"])
+                elif r.get("_candidato"):
+                    Path(r.pop("_candidato")).unlink(missing_ok=True)
+                estado = "OK" if r["similitud"] >= umbral else "se entiende mal"
+                print(f"  {r['archivo']}: {int(r['similitud'] * 100)}% {estado} -> \"{r['transcripcion']}\"")
+            pendientes = [r for r in pendientes if r["similitud"] < umbral and r["intentos"] < intentos]
+            if not pendientes:
+                break
+            print(f"Regenerando {len(pendientes)} frase(s) con otra variación...")
+            for r in pendientes:
+                candidato = carpeta / f"_candidato_{r['archivo']}"
+                candidato.write_bytes(vs.sintetizar(r["texto"], perfil["voice_id"], idioma, velocidad, estilo,
+                                                    pasos, random.randint(1, 2**31 - 1)))
+                r["_candidato"] = str(candidato)
+                r["intentos"] += 1
+            ronda += 1
+
+    registro_ruta.write_text(json.dumps(resultados, ensure_ascii=False, indent=1), encoding="utf-8")
+    malas = [r for r in resultados if r["similitud"] is not None and r["similitud"] < umbral]
+    if malas:
+        print("Aviso: estas frases siguen sin entenderse bien. Reescríbelas (más simples, números en letras, "
+              "marcas como se pronuncian) o regrábalas:")
+        for r in malas:
+            print(f"  {r['archivo']}: \"{r['texto']}\" se oye como \"{r['transcripcion']}\"")
+    return resultados
 
 
 # ── Chatterbox (respaldo) ────────────────────────────────────────────────────
 
 def generar_chatterbox(fragmentos, args, carpeta: Path) -> list[Path]:
     if not args.referencia or not args.referencia.is_file():
-        raise RuntimeError("Con --motor chatterbox necesitas --referencia con tu grabación (.wav).")
+        raise vs.VSError("Con --motor chatterbox necesitas --referencia con tu grabación (.wav).")
     try:
         import torch
         import torchaudio
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
     except ImportError:
-        raise RuntimeError(
+        raise vs.VSError(
             "Falta Chatterbox. Instálalo con: pip install -r .claude/skills/mi-voz/requirements.txt"
         ) from None
 
@@ -158,14 +176,9 @@ def generar_chatterbox(fragmentos, args, carpeta: Path) -> list[Path]:
     archivos = []
     for i, fragmento in enumerate(fragmentos, 1):
         print(f"[{i}/{len(fragmentos)}] {fragmento}")
-        wav = modelo.generate(
-            fragmento,
-            language_id=args.idioma,
-            audio_prompt_path=str(args.referencia),
-            exaggeration=args.expresividad,
-            cfg_weight=0.5,
-        )
-        destino = carpeta / f"{i:03d}.wav"
+        wav = modelo.generate(fragmento, language_id=args.idioma, audio_prompt_path=str(args.referencia),
+                              exaggeration=args.expresividad, cfg_weight=0.5)
+        destino = carpeta / f"{i:02d}.wav"
         torchaudio.save(str(destino), wav.cpu(), modelo.sr)
         archivos.append(destino)
     return archivos
@@ -176,7 +189,7 @@ def generar_chatterbox(fragmentos, args, carpeta: Path) -> list[Path]:
 def unir(archivos: list[Path], salida: Path, pausa: float) -> float:
     """Une los fragmentos con una pausa entre cada uno usando ffmpeg."""
     if not shutil.which("ffmpeg"):
-        raise RuntimeError("Falta ffmpeg. Instálalo (Mac: brew install ffmpeg · Windows: winget install ffmpeg).")
+        raise vs.VSError("Falta ffmpeg. Instálalo (Mac: brew install ffmpeg · Windows: winget install ffmpeg).")
     entradas, filtros, etiquetas = [], [], []
     for i, f in enumerate(archivos):
         entradas += ["-i", str(f)]
@@ -187,16 +200,21 @@ def unir(archivos: list[Path], salida: Path, pausa: float) -> float:
             etiquetas.append(f"[s{i}]")
     filtro = ";".join(filtros) + ";" + "".join(etiquetas) + f"concat=n={len(etiquetas)}:v=0:a=1[out]"
     salida.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *entradas,
-         "-filter_complex", filtro, "-map", "[out]", str(salida)],
-        check=True,
-    )
-    dur = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(salida)],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
-    return float(dur)
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *entradas,
+                    "-filter_complex", filtro, "-map", "[out]", str(salida)], check=True)
+    return duracion(salida)
+
+
+def agregar_opciones_voz(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--voz", default=os.environ.get("MI_VOZ_PERFIL", "Mi voz"),
+                   help='Nombre o ID del perfil en Voice Studio (por defecto "Mi voz")')
+    p.add_argument("--idioma", default="es", help="Código de idioma (por defecto: es)")
+    p.add_argument("--velocidad", type=float, default=1.0, help="0.25 a 4.0 (por defecto 1.0)")
+    p.add_argument("--estilo", help='Indicación de tono, p. ej. "enérgico y alegre"')
+    p.add_argument("--pasos", type=int, default=32, help="Refinamiento 8-64 (por defecto 32; más = más lento)")
+    p.add_argument("--sin-verificar", action="store_true", help="No transcribir para comprobar cada frase")
+    p.add_argument("--umbral", type=float, default=0.85, help="Parecido mínimo aceptado (0-1, por defecto 0.85)")
+    p.add_argument("--intentos", type=int, default=3, help="Intentos máximos por frase (por defecto 3)")
 
 
 def main() -> int:
@@ -205,21 +223,17 @@ def main() -> int:
     p.add_argument("--texto", help="Texto directo (en vez de --guion)")
     p.add_argument("--salida", type=Path, help="Archivo .wav de salida")
     p.add_argument("--motor", choices=["voicestudio", "chatterbox"], default="voicestudio")
-    p.add_argument("--voz", default=os.environ.get("MI_VOZ_PERFIL", "Mi voz"),
-                   help='Voice Studio: nombre o ID del perfil (por defecto "Mi voz")')
+    agregar_opciones_voz(p)
     p.add_argument("--referencia", type=Path, help="Chatterbox: grabación de tu voz (.wav)")
-    p.add_argument("--idioma", default="es", help="Código de idioma (por defecto: es)")
-    p.add_argument("--velocidad", type=float, default=1.0, help="Voice Studio: 0.25 a 4.0 (por defecto 1.0)")
-    p.add_argument("--estilo", help='Voice Studio: indicación de tono, p. ej. "enérgico y alegre"')
     p.add_argument("--expresividad", type=float, default=0.5, help="Chatterbox: 0.25 a 1.0")
-    p.add_argument("--pausa", type=float, default=0.25, help="Segundos de silencio entre fragmentos")
+    p.add_argument("--pausa", type=float, default=0.25, help="Segundos de silencio entre frases")
     p.add_argument("--listar-voces", action="store_true", help="Muestra tus perfiles de Voice Studio")
     p.add_argument("--prueba", action="store_true", help="Solo muestra cómo se divide el guion")
     args = p.parse_args()
 
     try:
         if args.listar_voces:
-            for v in vs_perfiles():
+            for v in vs.perfiles():
                 print(f'- "{v["name"]}" (idioma: {v.get("language") or "?"}, ID: {v["voice_id"]})')
             return 0
 
@@ -229,22 +243,28 @@ def main() -> int:
         maximo = MAX_VOICESTUDIO if args.motor == "voicestudio" else MAX_CHATTERBOX
         fragmentos = dividir_texto(texto, maximo)
         if not fragmentos:
-            raise RuntimeError("El guion está vacío.")
+            raise vs.VSError("El guion está vacío.")
 
         if args.prueba:
             for i, f in enumerate(fragmentos, 1):
-                print(f"[{i}] ({len(f)} caracteres) {f}")
+                print(f"[{i}] ({len(f)} caracteres) {vs.preparar_texto(f)}")
             return 0
         if not args.salida:
             p.error("falta --salida")
 
         with tempfile.TemporaryDirectory() as tmp:
-            generar = generar_voicestudio if args.motor == "voicestudio" else generar_chatterbox
-            archivos = generar(fragmentos, args, Path(tmp))
-            duracion = unir(archivos, args.salida, args.pausa)
-        print(f"Listo: {args.salida} ({duracion:.1f} s)")
+            carpeta = Path(tmp)
+            if args.motor == "voicestudio":
+                resultados = generar_frases(fragmentos, carpeta, args.voz, args.idioma, args.velocidad,
+                                            args.estilo, args.pasos, not args.sin_verificar,
+                                            args.umbral, args.intentos)
+                archivos = [carpeta / r["archivo"] for r in resultados]
+            else:
+                archivos = generar_chatterbox(fragmentos, args, carpeta)
+            total = unir(archivos, args.salida, args.pausa)
+        print(f"Listo: {args.salida} ({total:.1f} s)")
         return 0
-    except RuntimeError as e:
+    except (vs.VSError, subprocess.CalledProcessError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 

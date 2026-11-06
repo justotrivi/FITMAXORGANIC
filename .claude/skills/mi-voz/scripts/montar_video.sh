@@ -6,6 +6,8 @@
 # Si la voz dura más que el video, congela el último cuadro hasta que termine.
 set -euo pipefail
 
+[ -x "$HOME/.local/bin/ffmpeg" ] && PATH="$HOME/.local/bin:$PATH"
+
 if [ $# -lt 3 ]; then
   echo "Uso: $0 <video> <voz.wav> <salida.mp4> [mezclar|reemplazar]" >&2
   exit 1

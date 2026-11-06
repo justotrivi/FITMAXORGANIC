@@ -1,67 +1,80 @@
 ---
 name: mi-voz
-description: Pone la voz clonada del usuario como locución en sus videos. Úsalo cuando pida "ponle mi voz a este video", "narra este video con mi voz", "hazme una locución con mi voz" o "dobla este video con mi voz". Genera el audio con Voice Studio (código abierto, corre en la computadora del usuario) y lo monta en el video con ffmpeg.
+description: Pone la voz clonada del usuario como locución en sus videos. Úsalo cuando pida "ponle mi voz a este video", "narra este video con mi voz", "hazme una locución con mi voz" o "dobla este video con mi voz". Genera el audio con Voice Studio (código abierto, corre en la computadora del usuario), verifica que cada frase se entienda y lo monta en el video con ffmpeg, sincronizado con las escenas.
 ---
 
 # Mi voz en los videos
 
-Convierte un guion en audio con la voz del usuario y lo monta sobre un video.
+Rutas relativas a la raíz del repositorio. Scripts en `.claude/skills/mi-voz/scripts/`.
+Todo corre en la computadora del usuario (Voice Studio escucha en `http://localhost:3900`).
 
-Todas las rutas son relativas a la raíz del repositorio. Carpeta del skill: `.claude/skills/mi-voz/`.
+## 0. Antes de empezar (revisa siempre)
 
-## Antes de empezar (revisa esto siempre)
+1. **Voice Studio abierto**: `curl -s http://localhost:3900/health`. Si no responde, pide al usuario abrir la app y esperar a que cargue. No instales otra copia.
+2. **Memoria**: en Macs de 8 GB, generar voz necesita ~1,5 GB libres. Si falla con "memoria", pide cerrar Chrome y apps pesadas (dejar solo Claude y Voice Studio) y reintenta. No pruebes otra cosa antes.
+3. **Reconocimiento de voz** (para verificar frases y transcribir la referencia): si `vs.transcribir` dice que falta un modelo, selecciona uno ya instalado:
+   ```bash
+   curl -X POST http://localhost:3900/engines/select -H 'Content-Type: application/json' -d '{"family":"asr","backend_id":"faster-whisper","model_id":"deepdml/faster-whisper-large-v3-turbo-ct2"}'
+   ```
+   Consulta `GET /models` para ver qué está instalado. No descargues modelos sin permiso del usuario (pesan GB).
+4. **Perfil de voz**: `python3 .claude/skills/mi-voz/scripts/generar_voz.py --listar-voces`. Si no existe "Mi voz", ve al paso 1.
 
-1. **Voice Studio abierto**: comprueba con `curl -s http://localhost:3900/health`.
-   - Si no responde, pide al usuario que abra la app Voice Studio y espere a que cargue. No instales otra copia.
-   - Si el usuario usa otra dirección, va en la variable `VOICESTUDIO_URL`.
-2. **Perfil con su voz**: ejecuta `python .claude/skills/mi-voz/scripts/generar_voz.py --listar-voces`.
-   - Si no hay perfiles: pide una grabación de 15 a 30 segundos (hablando natural, sin ruido ni música). Prepárala con `bash .claude/skills/mi-voz/scripts/preparar_referencia.sh <grabacion> .claude/skills/mi-voz/voz/referencia.wav` (limpia y corta unos 10 s en una pausa natural) y súbela en Voice Studio, sección **Voice cloning**, como perfil **Mi voz**. Sube siempre la versión preparada: las referencias largas agotan la memoria en Macs de 8 GB.
-   - Clona solo la voz del usuario o la de alguien que lo haya autorizado.
-   - Si su perfil tiene otro nombre, pásalo con `--voz "<nombre>"`.
-3. **ffmpeg**: comprueba con `ffmpeg -version`.
+## 1. Crear el perfil de voz (una sola vez)
 
-## Flujo
+- Pide una grabación de 15 a 30 s: hablando natural, como en sus videos, en un lugar silencioso, a un palmo del micrófono, sin música.
+  - Si Claude está conectado a la Mac, puede grabar con el micrófono: lista los dispositivos con `ffmpeg -f avfoundation -list_devices true -i ""` (el número cambia si se conecta o desconecta el iPhone; revísalo justo antes) y graba con `ffmpeg -f avfoundation -i ":<n>" -t 35 -ac 1 -ar 48000 .claude/skills/mi-voz/voz/grabacion_original.wav`. Dale un texto para leer y que empiece al mandar "listo".
+- Crea el perfil:
+  ```bash
+  python3 .claude/skills/mi-voz/scripts/crear_perfil.py <grabacion> --es-mi-voz
+  ```
+  Esto limpia la grabación, corta unos 10 s en una pausa natural, **la transcribe** y crea o actualiza el perfil "Mi voz" con ese texto exacto. Usa `--es-mi-voz` solo si el usuario confirmó que la voz es suya.
+- **Nunca escribas a mano el texto de la referencia ni lo copies del guion que se leyó.** Si no coincide palabra por palabra con lo que se oye, el modelo mezcla pedazos de la grabación en las frases nuevas ("Hola", "lleva"... donde no van). Si no hay reconocimiento de voz, escucha/pide la transcripción exacta y pásala con `--texto-referencia`.
+- La grabación del usuario no se sube a git (`.gitignore`). Clona solo su voz o la de alguien que lo haya autorizado.
 
-### 1. Guion
-- Si el usuario dio el texto, úsalo tal cual (corrige solo errores evidentes y avísale).
-- Si pidió que lo escribas, redáctalo en su tono: frases cortas, para decirlo en voz alta. Muéstraselo y espera su visto bueno antes de generar el audio.
-- Calcula la duración: unas 150 palabras por minuto. Para un video de 30 s, el guion debe tener cerca de 75 palabras.
-- Guárdalo en `salidas/<nombre>_guion.txt`.
+## 2. Escribir frases que se entiendan
 
-### 2. Generar la voz
+Aplica estas reglas al guion (lo escriba el usuario o tú):
+- **Frases completas**, que se entiendan solas. Nada de empezar con "...", minúscula o "y". Si en pantalla la frase continúa la anterior ("…la trata como"), dale sujeto: "Instagram la trata como…".
+- **Números en letras**: "Error tres de diez", no "Error 3/10".
+- **Marcas, siglas y palabras en inglés como se pronuncian**: "Fit max orgánic", "reel" → "ril" si suena raro.
+- Frases cortas (menos de ~20 palabras). Unas 2,5 palabras por segundo de escena.
+- Muestra el guion al usuario y espera su visto bueno antes de generar.
+
+## 3a. Locución continua (un video, una narración)
+
 ```bash
-python .claude/skills/mi-voz/scripts/generar_voz.py \
-  --guion salidas/<nombre>_guion.txt \
-  --salida salidas/<nombre>_voz.wav
+python3 .claude/skills/mi-voz/scripts/generar_voz.py --guion salidas/<nombre>/guion.txt --salida salidas/<nombre>/voz.wav
+bash .claude/skills/mi-voz/scripts/montar_video.sh <video> salidas/<nombre>/voz.wav salidas/<nombre>_CON_MI_VOZ.mp4 [mezclar|reemplazar]
 ```
-Opciones útiles:
-- `--voz "<perfil>"`: nombre del perfil en Voice Studio (por defecto "Mi voz").
-- `--estilo "enérgico y alegre"`: indicación de tono (depende del motor elegido en Voice Studio).
-- `--velocidad 1.1`: un poco más rápido (de 0.25 a 4.0).
-- `--idioma es`: código de idioma (por defecto `es`).
-- `--pausa 0.25`: segundos de silencio entre fragmentos.
 
-El script divide los guiones largos en fragmentos y luego los une. Si Voice Studio responde con un error (falta un modelo, perfil no encontrado, equipo ocupado), muestra el mensaje al usuario. No descargues modelos sin su permiso.
+## 3b. Narración por escenas (reels con textos animados)
 
-**Respaldo sin Voice Studio**: si el usuario no puede usar la app, existe `--motor chatterbox --referencia .claude/skills/mi-voz/voz/referencia.wav` (requiere `pip install -r .claude/skills/mi-voz/requirements.txt`). Ofrécelo solo si Voice Studio no es una opción.
+1. Detecta escenas y mira el texto de cada una:
+   ```bash
+   python3 .claude/skills/mi-voz/scripts/narrar_por_escenas.py --detectar <video> --carpeta salidas/<nombre>
+   ```
+   Lee la imagen `salidas/<nombre>/escenas.jpg` para ver el texto. Si una escena tiene animación sin corte, puede traer dos frases: saca cuadros extra con ffmpeg (`-ss <seg> -frames:v 1`) para ubicar el segundo exacto.
+2. Escribe `salidas/<nombre>/guion.txt`, un renglón por frase: `segundo<TAB>frase` (aplica las reglas del paso 2).
+3. Genera, verifica, acomoda y monta:
+   ```bash
+   python3 .claude/skills/mi-voz/scripts/narrar_por_escenas.py --guion salidas/<nombre>/guion.txt --video <video> --salida salidas/<nombre>_CON_MI_VOZ.mp4
+   ```
+   `--modo mezclar` si el video tiene música que se debe conservar (por defecto `reemplazar`).
+   Si una frase no cabe en su escena (aviso "se corre"), acórtala en el guion y vuelve a correr: solo se regeneran las frases cambiadas.
 
-### 3. Montar en el video
-```bash
-bash .claude/skills/mi-voz/scripts/montar_video.sh <video.mp4> salidas/<nombre>_voz.wav salidas/<nombre>_final.mp4 [modo]
-```
-Modos:
-- `mezclar` (por defecto): conserva el audio original del video (música, ambiente) bajito y pone la voz encima.
-- `reemplazar`: quita el audio original y deja solo la voz.
+## Calidad: qué hacen los scripts y opciones
 
-Si la voz dura más que el video, el script congela el último cuadro hasta que termine. Si dura mucho menos, avisa al usuario y ofrécele alargar el guion.
+- Cada frase se genera con 32 pasos de refinamiento (`--pasos`; 16 es más rápido y peor) y luego **se transcribe para comprobar que se entiende**. Si se parece menos de 85 % al texto (`--umbral`), se regenera con otra variación, hasta 3 intentos (`--intentos`), y se queda la mejor.
+- Las frases que sigan mal se listan al final: reescríbelas según el paso 2. `--sin-verificar` salta la comprobación (más rápido, sin garantía).
+- `--velocidad 0.95` si suena apurada; `--estilo "enérgico"` para el tono.
+- Cada frase tarda ~1-2 min en una Mac M2 de 8 GB (más con verificación). Avisa al usuario cuánto falta.
 
-Para cambiar el volumen del audio original en modo `mezclar`, antepón `VOLUMEN_FONDO=0.25` al comando (por defecto 0.15).
+## 4. Entrega
 
-### 4. Entrega
-Indica al usuario dónde quedó el video final y cuánto dura (según lo que imprime el script, no lo supongas), y pregúntale si quiere cambiar el tono, la velocidad o el guion.
+Di dónde quedó el video, cuánto dura y el porcentaje con que se entiende cada frase (lo imprime el script). Tú no puedes escuchar el resultado: pide al usuario que lo revise y te diga qué frase ajustar.
 
 ## Problemas comunes
-- **"Not enough free memory to prepare this voice reference"** (pasa en Macs de 8 GB): la referencia del perfil es muy larga. Prepara una de unos 10 s con `preparar_referencia.sh` (ya corta en una pausa cerca de los 10 s por defecto; `DURACION=7` para más corta), crea un perfil nuevo con ella y pide al usuario cerrar apps pesadas (Chrome con muchas pestañas, por ejemplo).
-- **No suena como el usuario**: la grabación del perfil tiene ruido, música o es muy corta. Pide una grabación más limpia, prepárala con `preparar_referencia.sh` y rehaz el perfil.
-- **Pronuncia mal marcas o palabras en inglés**: escríbelas en el guion como se pronuncian (por ejemplo, "Fit max orgánic").
-- **Muy lento**: sin tarjeta gráfica NVIDIA o un Mac con chip M, generar audio tarda varios minutos. Es normal.
+- **Aparecen palabras de la grabación de referencia** ("Hola", "lleva"...): el texto de la referencia no coincide con el audio. Rehaz el perfil con `crear_perfil.py` (transcribe solo).
+- **"Not enough free memory"**: cerrar apps (ver paso 0). Si persiste, rehaz el perfil con `--duracion 7`.
+- **Una frase se entiende mal en todos los intentos**: reescríbela más simple; si son todas, la grabación es mala (lejos del micrófono, eco, ruido): graba de nuevo.
+- **Respaldo sin Voice Studio**: `generar_voz.py --motor chatterbox --referencia <wav>` (requiere `pip install -r .claude/skills/mi-voz/requirements.txt`). Solo si Voice Studio no es una opción.
