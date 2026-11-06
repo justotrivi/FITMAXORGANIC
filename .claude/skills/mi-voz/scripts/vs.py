@@ -1,7 +1,6 @@
 """Cliente mínimo de la API local de Voice Studio (solo biblioteca estándar, Python 3.9+)."""
 from __future__ import annotations
 
-import difflib
 import json
 import os
 import re
@@ -168,15 +167,46 @@ def transcribir(ruta: Path, idioma: str = "es") -> str:
     return texto.decode().strip()
 
 
+_UNIDADES = ("cero uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince "
+             "dieciseis diecisiete dieciocho diecinueve veinte veintiuno veintidos veintitres veinticuatro "
+             "veinticinco veintiseis veintisiete veintiocho veintinueve").split()
+_DECENAS = {3: "treinta", 4: "cuarenta", 5: "cincuenta", 6: "sesenta", 7: "setenta", 8: "ochenta", 9: "noventa"}
+
+
+def _numero_en_letras(n: int) -> str:
+    """0-100 en palabras (sin tildes, como las deja _palabras); otros números quedan en dígitos."""
+    if n < 30:
+        return _UNIDADES[n]
+    if n < 100:
+        d, u = divmod(n, 10)
+        return _DECENAS[d] + (f" y {_UNIDADES[u]}" if u else "")
+    return "cien" if n == 100 else str(n)
+
+
 def _palabras(texto: str) -> list[str]:
+    """Palabras normalizadas: minúsculas, sin tildes y con los números escritos en letras.
+
+    Whisper transcribe "tres de diez" como "3 de 10": sin esto, una frase bien dicha
+    se marcaría como mal entendida.
+    """
     texto = unicodedata.normalize("NFKD", texto.lower())
     texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = re.sub(r"\d+", lambda m: f" {_numero_en_letras(int(m.group()))} ", texto)
     return re.findall(r"[a-z0-9ñ]+", texto)
 
 
 def similitud(esperado: str, obtenido: str) -> float:
-    """0 a 1: qué tanto coincide lo que se oye con lo que debía decir (por palabras)."""
+    """0 a 1: 1 - tasa de error por palabra (palabras cambiadas, faltantes o sobrantes / palabras esperadas).
+
+    Una palabra colada en una frase corta ("Hola, error tres de diez") baja bastante la nota.
+    """
     a, b = _palabras(esperado), _palabras(obtenido)
     if not a or not b:
         return 0.0
-    return difflib.SequenceMatcher(None, a, b).ratio()
+    anterior = list(range(len(b) + 1))
+    for i, pa in enumerate(a, 1):
+        actual = [i]
+        for j, pb in enumerate(b, 1):
+            actual.append(min(anterior[j] + 1, actual[j - 1] + 1, anterior[j - 1] + (pa != pb)))
+        anterior = actual
+    return max(0.0, 1 - anterior[-1] / len(a))
