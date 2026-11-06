@@ -11,6 +11,8 @@ Uso:
   python generar_voz.py --listar-voces
   python generar_voz.py --motor chatterbox --guion guion.txt --referencia voz/referencia.wav --salida voz.wav
 """
+from __future__ import annotations  # compatible con Python 3.9 (el de macOS)
+
 import argparse
 import json
 import os

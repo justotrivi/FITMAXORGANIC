@@ -17,7 +17,7 @@ Genera la voz con [Voice Studio](https://github.com/debpalash/voicestudio): cód
    - Mac: `brew install ffmpeg`
    - Windows: `winget install ffmpeg`
 
-Para usar el skill, Python 3.10 o superior basta; no necesitas instalar nada más.
+Para usar el skill basta el Python 3 que ya trae la Mac (3.9 o superior); no necesitas instalar nada más.
 
 ## Uso
 
