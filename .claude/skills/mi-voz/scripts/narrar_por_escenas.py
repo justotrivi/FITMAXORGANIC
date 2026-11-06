@@ -26,7 +26,7 @@ from pathlib import Path
 DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(DIR))
 import vs  # noqa: E402
-from generar_voz import agregar_opciones_voz, duracion, generar_frases  # noqa: E402
+from generar_voz import agregar_opciones_voz, duracion, generar_frases, masterizar  # noqa: E402
 
 MAX_ACELERAR = 1.15   # acelerar más de 15 % se nota
 SEPARACION = 0.12     # silencio mínimo entre frases
@@ -132,6 +132,7 @@ def main() -> int:
     p.add_argument("--modo", choices=["reemplazar", "mezclar"], default="reemplazar",
                    help="reemplazar (por defecto) quita el audio original; mezclar lo deja bajito")
     agregar_opciones_voz(p)
+    p.set_defaults(velocidad=1.1)  # en reels, un ritmo un poco más ágil suena con más energía
     args = p.parse_args()
 
     try:
@@ -150,6 +151,8 @@ def main() -> int:
         plan, avisos = acomodar(lineas, resultados, carpeta / "frases", fin_video)
         narracion = carpeta / "narracion.wav"
         mezclar(plan, carpeta / "frases", narracion)
+        if not args.voz_natural:
+            masterizar(narracion)
 
         print("\nLínea de tiempo:")
         for i, x in enumerate(plan, 1):

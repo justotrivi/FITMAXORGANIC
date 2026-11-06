@@ -37,7 +37,7 @@ else
 fi
 
 # Audio: voz normalizada, opcionalmente sobre el audio original bajito
-FILTRO_VOZ="[1:a]aresample=48000,loudnorm=I=-16:TP=-1.5:LRA=11[voz]"
+FILTRO_VOZ="[1:a]aresample=48000,loudnorm=I=-14:TP=-1:LRA=9[voz]"
 if [ "$MODO" = "mezclar" ] && [ -n "$TIENE_AUDIO" ]; then
   FILTRO_A="${FILTRO_VOZ};[0:a]aresample=48000,volume=${VOLUMEN_FONDO}[fondo];[fondo][voz]amix=inputs=2:duration=longest:normalize=0[a]"
 else

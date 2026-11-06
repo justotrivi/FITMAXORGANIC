@@ -205,6 +205,26 @@ def unir(archivos: list[Path], salida: Path, pausa: float) -> float:
     return duracion(salida)
 
 
+# Procesado "voz de locutor": quita graves que embarran, da presencia (claridad), comprime para que
+# todo se oiga parejo y fuerte, y deja el volumen en el estándar de Instagram/TikTok (-14 LUFS).
+CADENA_ENERGIA = (
+    "highpass=f=80,"
+    "equalizer=f=250:t=q:w=1:g=-2,"
+    "equalizer=f=3500:t=q:w=1.2:g=3,"
+    "equalizer=f=8000:t=q:w=1:g=1.5,"
+    "acompressor=threshold=0.1:ratio=3:attack=5:release=80:makeup=2,"
+    "loudnorm=I=-14:TP=-1:LRA=7"
+)
+
+
+def masterizar(ruta: Path) -> None:
+    """Aplica CADENA_ENERGIA al archivo, en el mismo lugar."""
+    temporal = ruta.with_name(ruta.stem + "_master.wav")
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(ruta),
+                    "-af", CADENA_ENERGIA, "-ar", "48000", str(temporal)], check=True)
+    temporal.replace(ruta)
+
+
 def agregar_opciones_voz(p: argparse.ArgumentParser) -> None:
     p.add_argument("--voz", default=os.environ.get("MI_VOZ_PERFIL", "Mi voz"),
                    help='Nombre o ID del perfil en Voice Studio (por defecto "Mi voz")')
@@ -215,6 +235,8 @@ def agregar_opciones_voz(p: argparse.ArgumentParser) -> None:
     p.add_argument("--sin-verificar", action="store_true", help="No transcribir para comprobar cada frase")
     p.add_argument("--umbral", type=float, default=0.85, help="Parecido mínimo aceptado (0-1, por defecto 0.85)")
     p.add_argument("--intentos", type=int, default=3, help="Intentos máximos por frase (por defecto 3)")
+    p.add_argument("--voz-natural", action="store_true",
+                   help="Sin procesado de locutor (por defecto se comprime, se da presencia y se sube a -14 LUFS)")
 
 
 def main() -> int:
@@ -262,6 +284,8 @@ def main() -> int:
             else:
                 archivos = generar_chatterbox(fragmentos, args, carpeta)
             total = unir(archivos, args.salida, args.pausa)
+        if not args.voz_natural:
+            masterizar(args.salida)
         print(f"Listo: {args.salida} ({total:.1f} s)")
         return 0
     except (vs.VSError, subprocess.CalledProcessError) as e:

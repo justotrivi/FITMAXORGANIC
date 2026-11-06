@@ -37,7 +37,9 @@ Aplica estas reglas al guion (lo escriba el usuario o tú):
 - **Frases completas**, que se entiendan solas. Nada de empezar con "...", minúscula o "y". Si en pantalla la frase continúa la anterior ("…la trata como"), dale sujeto: "Instagram la trata como…".
 - **Números en letras**: "Error tres de diez", no "Error 3/10".
 - **Marcas, siglas y palabras en inglés como se pronuncian**: "Fit max orgánic", "reel" → "ril" si suena raro.
-- Frases cortas (menos de ~20 palabras). Unas 2,5 palabras por segundo de escena.
+- Frases cortas (menos de ~20 palabras).
+- **Llena las escenas, sin silencios largos**: a velocidad 1.1 la voz dice ~2,6 palabras por segundo. Apunta a ocupar ~85 % de cada escena: (duración de la escena − 0,5 s) × 2,6 palabras. Una escena de 5 s lleva ~11 palabras; una de 7 s, ~16.
+- **Tono de reel, con energía**: frases con gancho y directas a la persona ("Ojo con esto", "te lo digo en serio", "así de simple"), ejemplos concretos, verbos en imperativo. Amplía lo que dice la pantalla, no lo repitas palabra por palabra.
 - Muestra el guion al usuario y espera su visto bueno antes de generar.
 
 ## 3a. Locución continua (un video, una narración)
@@ -66,7 +68,11 @@ bash .claude/skills/mi-voz/scripts/montar_video.sh <video> salidas/<nombre>/voz.
 
 - Cada frase se genera con 32 pasos de refinamiento (`--pasos`; 16 es más rápido y peor) y luego **se transcribe para comprobar que se entiende**. Si se parece menos de 85 % al texto (`--umbral`), se regenera con otra variación, hasta 3 intentos (`--intentos`), y se queda la mejor.
 - Las frases que sigan mal se listan al final: reescríbelas según el paso 2. `--sin-verificar` salta la comprobación (más rápido, sin garantía).
-- `--velocidad 0.95` si suena apurada; `--estilo "enérgico"` para el tono.
+- **Energía**: el motor (OmniVoice) no tiene control de "emoción"; copia la forma de hablar de la grabación de referencia. Para una voz más activa:
+  - Por defecto se aplica un procesado de locutor (compresión, presencia, −14 LUFS, el estándar de Instagram/TikTok). `--voz-natural` lo desactiva.
+  - `narrar_por_escenas.py` usa `--velocidad 1.1` por defecto (más ágil); `generar_voz.py` usa 1.0. Baja a 1.0 si suena apurada.
+  - Lo que más cambia la energía es **regrabar la referencia hablando como en un reel** (con ánimo, más fuerte, sonriendo) y rehacer el perfil con `crear_perfil.py`.
+  - `--estilo` solo acepta etiquetas de diseño de voz de OmniVoice (género, edad, tono grave/agudo, susurro, acento); no sirve para "enérgico".
 - Cada frase tarda ~1-2 min en una Mac M2 de 8 GB (más con verificación). Avisa al usuario cuánto falta.
 
 ## 4. Entrega
