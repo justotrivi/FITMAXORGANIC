@@ -1,0 +1,6 @@
+# Skill mi-voz: tu grabación de voz y los resultados no se suben
+.claude/skills/mi-voz/voz/*
+!.claude/skills/mi-voz/voz/.gitkeep
+salidas/
+.venv/
+__pycache__/
