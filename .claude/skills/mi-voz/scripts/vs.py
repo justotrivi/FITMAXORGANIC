@@ -113,6 +113,7 @@ def preparar_texto(texto: str) -> str:
     texto = re.sub(r"^[\s.,;:…-]+", "", texto)  # sin puntos suspensivos ni comas al inicio
     if texto and texto[0].islower():
         texto = texto[0].upper() + texto[1:]
+    texto = re.sub(r"[\s,;:]+$", "", texto)  # "volumen," -> "volumen." (no "volumen,.")
     if texto and texto[-1] not in ".!?…":
         texto += "."
     return texto
