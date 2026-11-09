@@ -79,6 +79,12 @@ bash .claude/skills/mi-voz/scripts/montar_video.sh <video> salidas/<nombre>/voz.
 
 Di dónde quedó el video, cuánto dura y el porcentaje con que se entiende cada frase (lo imprime el script). Tú no puedes escuchar el resultado: pide al usuario que lo revise y te diga qué frase ajustar.
 
+## Respiraciones
+
+El modelo inspira al inicio de casi cada frase (~0,3 s) y el procesado de locutor las sube hasta oírse. Por defecto los scripts limpian cada frase (`respiraciones.py`) antes de mezclar: recortan el aire antes de la primera y después de la última palabra, y bajan 20 dB solo las respiraciones de en medio que están aisladas de la voz (las s, f, z van pegadas a la voz y no se tocan). Necesita `numpy` (`python3 -m pip install --user numpy`); sin numpy hace un recorte básico con ffmpeg. `--con-respiraciones` lo desactiva. Los originales quedan en `frases/` y las limpias en `frases_limpias/`.
+
+Para volver a montar un video ya generado sin respiraciones basta correr de nuevo `narrar_por_escenas.py` con el mismo guion: reutiliza las frases y solo vuelve a limpiar y mezclar.
+
 ## Problemas comunes
 - **Aparecen palabras de la grabación de referencia** ("Hola", "lleva"...): el texto de la referencia no coincide con el audio. Rehaz el perfil con `crear_perfil.py` (transcribe solo).
 - **"Not enough free memory"**: cerrar apps (ver paso 0). Si persiste, rehaz el perfil con `--duracion 7`.

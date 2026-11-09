@@ -1,2 +1,4 @@
 chatterbox-tts>=0.1.4
 torchaudio
+# limpieza de respiraciones (opcional, recomendado)
+numpy

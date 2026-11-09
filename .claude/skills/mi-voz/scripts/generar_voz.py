@@ -217,6 +217,19 @@ CADENA_ENERGIA = (
 )
 
 
+def limpiar_frases(resultados: list[dict], origen: Path, destino: Path) -> Path:
+    """Copia cada frase de `origen` a `destino` sin respiraciones (los originales no se tocan)."""
+    from respiraciones import limpiar
+    destino.mkdir(parents=True, exist_ok=True)
+    recortes = []
+    for r in resultados:
+        info = limpiar(origen / r["archivo"], destino / r["archivo"])
+        recortes.append(info.get("recorte_inicio", 0) + info.get("recorte_final", 0))
+    if recortes:
+        print(f"Respiraciones: limpias {len(recortes)} frases (en total se quitaron {sum(recortes):.1f} s de aire).")
+    return destino
+
+
 def masterizar(ruta: Path) -> None:
     """Aplica CADENA_ENERGIA al archivo, en el mismo lugar."""
     temporal = ruta.with_name(ruta.stem + "_master.wav")
@@ -235,6 +248,8 @@ def agregar_opciones_voz(p: argparse.ArgumentParser) -> None:
     p.add_argument("--sin-verificar", action="store_true", help="No transcribir para comprobar cada frase")
     p.add_argument("--umbral", type=float, default=0.85, help="Parecido mínimo aceptado (0-1, por defecto 0.85)")
     p.add_argument("--intentos", type=int, default=3, help="Intentos máximos por frase (por defecto 3)")
+    p.add_argument("--con-respiraciones", action="store_true",
+                   help="No quitar las respiraciones del inicio/final de cada frase")
     p.add_argument("--voz-natural", action="store_true",
                    help="Sin procesado de locutor (por defecto se comprime, se da presencia y se sube a -14 LUFS)")
 
@@ -280,7 +295,10 @@ def main() -> int:
                 resultados = generar_frases(fragmentos, carpeta, args.voz, args.idioma, args.velocidad,
                                             args.estilo, args.pasos, not args.sin_verificar,
                                             args.umbral, args.intentos)
-                archivos = [carpeta / r["archivo"] for r in resultados]
+                fuente = carpeta
+                if not args.con_respiraciones:
+                    fuente = limpiar_frases(resultados, carpeta, carpeta / "limpias")
+                archivos = [fuente / r["archivo"] for r in resultados]
             else:
                 archivos = generar_chatterbox(fragmentos, args, carpeta)
             total = unir(archivos, args.salida, args.pausa)

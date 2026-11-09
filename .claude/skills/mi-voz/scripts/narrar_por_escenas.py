@@ -26,7 +26,7 @@ from pathlib import Path
 DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(DIR))
 import vs  # noqa: E402
-from generar_voz import agregar_opciones_voz, duracion, generar_frases, masterizar  # noqa: E402
+from generar_voz import agregar_opciones_voz, duracion, generar_frases, limpiar_frases, masterizar  # noqa: E402
 
 MAX_ACELERAR = 1.15   # acelerar más de 15 % se nota
 SEPARACION = 0.12     # silencio mínimo entre frases
@@ -148,9 +148,12 @@ def main() -> int:
         resultados = generar_frases([t for _, t in lineas], carpeta / "frases", args.voz, args.idioma,
                                     args.velocidad, args.estilo, args.pasos, not args.sin_verificar,
                                     args.umbral, args.intentos, reusar=True)
-        plan, avisos = acomodar(lineas, resultados, carpeta / "frases", fin_video)
+        fuente = carpeta / "frases"
+        if not args.con_respiraciones:
+            fuente = limpiar_frases(resultados, carpeta / "frases", carpeta / "frases_limpias")
+        plan, avisos = acomodar(lineas, resultados, fuente, fin_video)
         narracion = carpeta / "narracion.wav"
-        mezclar(plan, carpeta / "frases", narracion)
+        mezclar(plan, fuente, narracion)
         if not args.voz_natural:
             masterizar(narracion)
 
